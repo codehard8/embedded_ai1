@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fall Detection System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;600;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:       #0a0c0f;
+            --surface:  #111418;
+            --border:   #1e2329;
+            --normal:   #00e5a0;
+            --fall:     #ff3b3b;
+            --idle:     #4a5568;
+            --text:     #e2e8f0;
+            --muted:    #556070;
+            --mono:     'Share Tech Mono', monospace;
+            --sans:     'Barlow', sans-serif;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--sans);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            overflow: hidden;
+        }
+
+        /* subtle grid background */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
+            background-size: 40px 40px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .wrapper {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: 480px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* ── Header ── */
+        .header {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+        }
+        .title {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 4px;
+            color: var(--muted);
+            text-transform: uppercase;
+        }
+        .subtitle {
+            font-size: 26px;
+            font-weight: 800;
+            line-height: 1;
+            color: var(--text);
+        }
+        .version {
+            font-family: var(--mono);
+            font-size: 11px;
+            color: var(--muted);
+            text-align: right;
+        }
+
+        /* ── Status bar ── */
+        .status-bar {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 12px 18px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .pulse-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--fall);
+            flex-shrink: 0;
+            transition: background 0.4s;
+        }
+        .pulse-dot.connected {
+            background: var(--normal);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(0,229,160,.5); }
+            50%       { box-shadow: 0 0 0 6px rgba(0,229,160,0); }
+        }
+        .status-label {
+            font-family: var(--mono);
+            font-size: 13px;
+            color: var(--muted);
+            flex: 1;
+        }
+
+        /* ── Connect button ── */
+        .btn-connect {
+            background: transparent;
+            border: 2px solid var(--normal);
+            color: var(--normal);
+            font-family: var(--sans);
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            padding: 14px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background .25s, color .25s, box-shadow .25s;
+            width: 100%;
+        }
+        .btn-connect:hover {
+            background: var(--normal);
+            color: var(--bg);
+            box-shadow: 0 0 24px rgba(0,229,160,.35);
+        }
+        .btn-connect:disabled {
+            opacity: .4;
+            cursor: default;
+        }
+
+        /* ── Main display ── */
+        .display {
+            background: var(--surface);
+            border: 2px solid var(--border);
+            border-radius: 20px;
+            padding: 40px 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            transition: border-color .35s, background .35s, box-shadow .35s;
+            min-height: 260px;
+            justify-content: center;
+        }
+        .display.state-normal {
+            border-color: var(--normal);
+            background: rgba(0,229,160,.06);
+            box-shadow: 0 0 40px rgba(0,229,160,.12);
+        }
+        .display.state-fall {
+            border-color: var(--fall);
+            background: rgba(255,59,59,.07);
+            box-shadow: 0 0 40px rgba(255,59,59,.18);
+            animation: shake .4s ease;
+        }
+        @keyframes shake {
+            0%,100% { transform: translateX(0); }
+            20%      { transform: translateX(-6px); }
+            40%      { transform: translateX(6px); }
+            60%      { transform: translateX(-4px); }
+            80%      { transform: translateX(4px); }
+        }
+        .display-eyebrow {
+            font-size: 10px;
+            letter-spacing: 4px;
+            color: var(--muted);
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .display-icon {
+            font-size: 52px;
+            line-height: 1;
+            transition: transform .3s ease;
+        }
+        .display.state-fall .display-icon {
+            animation: fallBounce .5s ease;
+        }
+        @keyframes fallBounce {
+            0%   { transform: rotate(0deg) scale(1); }
+            30%  { transform: rotate(-15deg) scale(1.2); }
+            60%  { transform: rotate(10deg) scale(1.1); }
+            100% { transform: rotate(0deg) scale(1); }
+        }
+        .display-label {
+            font-size: 46px;
+            font-weight: 800;
+            letter-spacing: 2px;
+            color: var(--idle);
+            transition: color .35s;
+            text-align: center;
+        }
+        .display.state-normal .display-label { color: var(--normal); }
+        .display.state-fall   .display-label { color: var(--fall); }
+
+        /* ── Confidence meter ── */
+        .conf-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            margin-top: 4px;
+        }
+        .conf-label {
+            font-family: var(--mono);
+            font-size: 11px;
+            color: var(--muted);
+            white-space: nowrap;
+        }
+        .conf-track {
+            flex: 1;
+            height: 6px;
+            background: var(--border);
+            border-radius: 99px;
+            overflow: hidden;
+        }
+        .conf-fill {
+            height: 100%;
+            width: 0%;
+            background: var(--idle);
+            border-radius: 99px;
+            transition: width .4s ease, background .4s;
+        }
+        .display.state-normal .conf-fill { background: var(--normal); }
+        .display.state-fall   .conf-fill { background: var(--fall); }
+        .conf-pct {
+            font-family: var(--mono);
+            font-size: 12px;
+            color: var(--muted);
+            width: 36px;
+            text-align: right;
+        }
+
+        /* ── Stats row ── */
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 14px 16px;
+        }
+        .stat-title {
+            font-size: 10px;
+            letter-spacing: 2px;
+            color: var(--muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+        .stat-value {
+            font-family: var(--mono);
+            font-size: 22px;
+            color: var(--text);
+        }
+
+        /* ── Log ── */
+        .log-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .log-header {
+            padding: 10px 16px;
+            border-bottom: 1px solid var(--border);
+            font-size: 10px;
+            letter-spacing: 3px;
+            color: var(--muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            display: flex;
+            justify-content: space-between;
+        }
+        .log-clear {
+            background: none;
+            border: none;
+            color: var(--muted);
+            cursor: pointer;
+            font-size: 10px;
+            letter-spacing: 1px;
+            font-family: var(--mono);
+            padding: 0;
+        }
+        .log-clear:hover { color: var(--text); }
+        .log-entries {
+            max-height: 130px;
+            overflow-y: auto;
+            padding: 10px 16px;
+            display: flex;
+            flex-direction: column-reverse;
+            gap: 4px;
+        }
+        .log-entry {
+            font-family: var(--mono);
+            font-size: 12px;
+            display: flex;
+            gap: 10px;
+        }
+        .log-time { color: var(--muted); flex-shrink: 0; }
+        .log-msg.fall   { color: var(--fall); }
+        .log-msg.normal { color: var(--normal); }
+        .log-msg.info   { color: var(--muted); }
+    </style>
+</head>
+<body>
+
+<div class="wrapper">
+
+    <!-- Header -->
+    <div class="header">
+        <div>
+            <div class="title">Arduino Nano 33 BLE Sense</div>
+            <div class="subtitle">Fall Detection System</div>
+        </div>
+        <div class="version">v2.0<br>TinyML</div>
+    </div>
+
+    <!-- Status -->
+    <div class="status-bar">
+        <div class="pulse-dot" id="pulse-dot"></div>
+        <div class="status-label" id="status-text">Disconnected — waiting for device</div>
+    </div>
+
+    <!-- Connect Button -->
+    <button class="btn-connect" id="connect-btn" onclick="connectBluetooth()">
+        Connect to FallDetector
+    </button>
+
+    <!-- Main Display -->
+    <div class="display" id="display-box">
+        <div class="display-eyebrow">Detection Status</div>
+        <div class="display-icon" id="display-icon">📡</div>
+        <div class="display-label" id="state-label">OFFLINE</div>
+
+        <!-- Confidence bar (hidden until connected) -->
+        <div class="conf-row" id="conf-row" style="display:none;">
+            <span class="conf-label">CONFIDENCE</span>
+            <div class="conf-track">
+                <div class="conf-fill" id="conf-fill"></div>
+            </div>
+            <span class="conf-pct" id="conf-pct">0%</span>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats">
+        <div class="stat-card">
+            <div class="stat-title">Fall Events</div>
+            <div class="stat-value" id="fall-count">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-title">Uptime</div>
+            <div class="stat-value" id="uptime">00:00</div>
+        </div>
+    </div>
+
+    <!-- Event Log -->
+    <div class="log-box">
+        <div class="log-header">
+            <span>Event Log</span>
+            <button class="log-clear" onclick="clearLog()">CLEAR</button>
+        </div>
+        <div class="log-entries" id="log-entries">
+            <div class="log-entry">
+                <span class="log-time">--:--:--</span>
+                <span class="log-msg info">System ready. Click connect to begin.</span>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // ── BLE UUIDs (must match Arduino sketch exactly) ──
+    const SERVICE_UUID  = "19b10000-e8f2-537e-4f6c-d104768a1214";
+    const FALL_CHAR     = "19b10001-e8f2-537e-4f6c-d104768a1214";
+    const CONF_CHAR     = "19b10002-e8f2-537e-4f6c-d104768a1214";
+
+    let device, fallCharacteristic, confCharacteristic;
+    let fallCount   = 0;
+    let connectedAt = null;
+    let uptimeTimer = null;
+
+    // ── UI helpers ──
+    const $  = id => document.getElementById(id);
+    const UI = {
+        dot:       $('pulse-dot'),
+        status:    $('status-text'),
+        btn:       $('connect-btn'),
+        display:   $('display-box'),
+        icon:      $('display-icon'),
+        label:     $('state-label'),
+        confRow:   $('conf-row'),
+        confFill:  $('conf-fill'),
+        confPct:   $('conf-pct'),
+        fallCount: $('fall-count'),
+        uptime:    $('uptime'),
+        log:       $('log-entries'),
+    };
+
+    function setStatus(connected, msg) {
+        UI.status.textContent = msg;
+        UI.dot.classList.toggle('connected', connected);
+    }
+
+    function setState(state, confidence = 0) {
+        // state: 'idle' | 'normal' | 'fall'
+        UI.display.className = 'display' + (state !== 'idle' ? ` state-${state}` : '');
+
+        const icons  = { idle: '📡', normal: '🟢', fall: '🚨' };
+        const labels = { idle: 'IDLE',   normal: 'NORMAL', fall: 'FALL DETECTED' };
+
+        UI.icon.textContent  = icons[state]  || '📡';
+        UI.label.textContent = labels[state] || 'OFFLINE';
+
+        // Confidence bar
+        UI.confFill.style.width = confidence + '%';
+        UI.confPct.textContent  = confidence + '%';
+    }
+
+    function addLog(msg, type = 'info') {
+        const now  = new Date();
+        const time = now.toTimeString().slice(0, 8);
+        const entry = document.createElement('div');
+        entry.className = 'log-entry';
+        entry.innerHTML = `<span class="log-time">${time}</span><span class="log-msg ${type}">${msg}</span>`;
+        UI.log.prepend(entry);
+        // Keep max 30 entries
+        while (UI.log.children.length > 30) UI.log.removeChild(UI.log.lastChild);
+    }
+
+    function clearLog() {
+        UI.log.innerHTML = '';
+        addLog('Log cleared.', 'info');
+    }
+
+    function startUptime() {
+        connectedAt = Date.now();
+        uptimeTimer = setInterval(() => {
+            const secs  = Math.floor((Date.now() - connectedAt) / 1000);
+            const mm    = String(Math.floor(secs / 60)).padStart(2, '0');
+            const ss    = String(secs % 60).padStart(2, '0');
+            UI.uptime.textContent = `${mm}:${ss}`;
+        }, 1000);
+    }
+
+    // ── BLE Connection ──
+    async function connectBluetooth() {
+        UI.btn.disabled = true;
+        setStatus(false, 'Scanning for FallDetector…');
+        addLog('Scanning for device…', 'info');
+
+        try {
+            device = await navigator.bluetooth.requestDevice({
+                filters: [{ name: 'FallDetector' }],
+                optionalServices: [SERVICE_UUID]
+            });
+
+            setStatus(false, 'Connecting…');
+            const server  = await device.gatt.connect();
+
+            setStatus(false, 'Discovering service…');
+            const service = await server.getPrimaryService(SERVICE_UUID);
+
+            setStatus(false, 'Binding characteristics…');
+            fallCharacteristic = await service.getCharacteristic(FALL_CHAR);
+            confCharacteristic = await service.getCharacteristic(CONF_CHAR);
+
+            // Subscribe to notifications
+            await fallCharacteristic.startNotifications();
+            fallCharacteristic.addEventListener('characteristicvaluechanged', onFallChanged);
+
+            await confCharacteristic.startNotifications();
+            confCharacteristic.addEventListener('characteristicvaluechanged', onConfChanged);
+
+            // Disconnect handler
+            device.addEventListener('gattserverdisconnected', onDisconnected);
+
+            // Update UI
+            setStatus(true, `Connected — ${device.name}`);
+            UI.btn.textContent = 'DISCONNECT';
+            UI.btn.disabled    = false;
+            UI.btn.onclick     = disconnectBluetooth;
+            UI.confRow.style.display = 'flex';
+            setState('idle', 0);
+            startUptime();
+            addLog(`Connected to ${device.name}`, 'normal');
+
+        } catch (err) {
+            console.error(err);
+            setStatus(false, 'Connection failed — try again');
+            addLog('Connection failed: ' + err.message, 'info');
+            UI.btn.disabled = false;
+        }
+    }
+
+    function disconnectBluetooth() {
+        if (device && device.gatt.connected) {
+            device.gatt.disconnect();
+        }
+    }
+
+    // ── BLE Data Handlers ──
+    let latestFall = 0;
+    let latestConf = 0;
+
+    function onFallChanged(event) {
+        latestFall = event.target.value.getUint8(0); // 0 = normal, 1 = fall
+        updateDisplay();
+    }
+
+    function onConfChanged(event) {
+        latestConf = event.target.value.getUint8(0); // 0–100
+        updateDisplay();
+    }
+
+    function updateDisplay() {
+        if (latestFall === 1) {
+            // ── FALL DETECTED ──
+            setState('fall', latestConf);
+            fallCount++;
+            UI.fallCount.textContent = fallCount;
+            addLog(`FALL DETECTED — confidence ${latestConf}%`, 'fall');
+        } else {
+            // ── NORMAL ──
+            setState('normal', latestConf);
+        }
+    }
+
+    function onDisconnected() {
+        if (uptimeTimer) clearInterval(uptimeTimer);
+        setStatus(false, 'Device disconnected');
+        setState('idle', 0);
+        UI.confRow.style.display = 'none';
+        UI.btn.textContent = 'Connect to FallDetector';
+        UI.btn.onclick     = connectBluetooth;
+        UI.btn.disabled    = false;
+        addLog('Device disconnected.', 'info');
+    }
+</script>
+</body>
+</html>
